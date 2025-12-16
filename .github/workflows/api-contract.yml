@@ -1,0 +1,33 @@
+name: API Contract Validation
+
+on:
+  pull_request:
+    paths:
+      - 'openapi/**'
+      - 'libs/contracts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/api-contract.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run api:lint
+      - run: pnpm run api:gen-types
+      - name: Check generated types
+        run: |
+          if git diff --exit-code libs/contracts/src/api-types.ts; then
+            echo "✅ Types match"
+          else
+            echo "❌ Types don't match. Run: pnpm api:sync"
+            exit 1
+          fi
