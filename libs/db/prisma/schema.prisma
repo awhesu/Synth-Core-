@@ -1,0 +1,290 @@
+// Syntherium Platform Database Schema
+// Financial Truth Layer for LPG Operations
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ORDER DOMAIN
+// ============================================
+
+model Order {
+  id                    String       @id @default(cuid())
+  customerId            String       @map("customer_id")
+  vendorId              String       @map("vendor_id")
+  
+  // Financials (precision 19,4 for currency)
+  subtotal              Decimal      @db.Decimal(19, 4)
+  deliveryFee           Decimal      @default(0) @map("delivery_fee") @db.Decimal(19, 4)
+  totalAmount           Decimal      @map("total_amount") @db.Decimal(19, 4)
+  
+  // Delivery
+  deliveryType          DeliveryType @map("delivery_type")
+  deliveryAddressJson   Json?        @map("delivery_address_json")
+  
+  // Status
+  status                OrderStatus  @default(PENDING)
+  
+  // Assignment
+  driverId              String?      @map("driver_id")
+  estimatedDeliveryTime DateTime?    @map("estimated_delivery_time")
+  
+  // Completion
+  deliveredAt           DateTime?    @map("delivered_at")
+  cancelledAt           DateTime?    @map("cancelled_at")
+  cancellationReason    String?      @map("cancellation_reason")
+  
+  notes                 String?
+  
+  // Timestamps
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  
+  // Relations
+  items                 OrderItem[]
+  paymentIntents        PaymentIntent[]
+  ledgerEntries         LedgerEntry[]
+  
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String  @map("order_id")
+  productId   String  @map("product_id")
+  productName String  @map("product_name")
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(19, 4)
+  
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@index([orderId])
+  @@map("order_items")
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+}
+
+// ============================================
+// PAYMENT INTENT DOMAIN
+// ============================================
+
+model PaymentIntent {
+  id              String              @id @default(cuid())
+  reference       String              @unique // Deterministic: PAYMENT_{orderId}
+  orderId         String              @map("order_id")
+  
+  // Financial amounts (precision 19,4)
+  amount          Decimal             @db.Decimal(19, 4) // Customer pays
+  originalAmount  Decimal             @map("original_amount") @db.Decimal(19, 4) // Full value
+  discountAmount  Decimal             @default(0) @map("discount_amount") @db.Decimal(19, 4) // Subsidy
+  discountCode    String?             @map("discount_code")
+  
+  // Provider
+  provider        PaymentProvider
+  providerRef     String?             @map("provider_ref")
+  currency        String              @default("NGN")
+  
+  // Status
+  status          PaymentIntentStatus @default(PENDING)
+  
+  // Metadata
+  metadata        Json?
+  
+  // Timestamps
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  
+  // Relations
+  order           Order               @relation(fields: [orderId], references: [id])
+  refundIntents   RefundIntent[]
+  webhookInbox    WebhookInbox[]
+  
+  @@index([orderId])
+  @@index([reference])
+  @@index([status])
+  @@index([provider, providerRef])
+  @@map("payment_intents")
+}
+
+model RefundIntent {
+  id               String             @id @default(cuid())
+  reference        String             @unique // Deterministic: REFUND_{paymentIntentId}_{seq}
+  paymentIntentId  String             @map("payment_intent_id")
+  
+  amount           Decimal            @db.Decimal(19, 4)
+  reason           RefundReason
+  description      String?
+  
+  status           RefundIntentStatus @default(PENDING)
+  
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  
+  paymentIntent    PaymentIntent      @relation(fields: [paymentIntentId], references: [id])
+  
+  @@index([paymentIntentId])
+  @@index([status])
+  @@map("refund_intents")
+}
+
+enum PaymentProvider {
+  flutterwave
+  paystack
+  stripe
+}
+
+enum PaymentIntentStatus {
+  PENDING
+  INITIATED
+  CONFIRMING
+  SETTLED
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum RefundIntentStatus {
+  PENDING
+  PROCESSING
+  SETTLED
+  FAILED
+}
+
+enum RefundReason {
+  CUSTOMER_REQUEST
+  VENDOR_CANCELLATION
+  DELIVERY_FAILED
+  DUPLICATE_PAYMENT
+  FRAUD
+  OTHER
+}
+
+// ============================================
+// WEBHOOK INBOX DOMAIN
+// ============================================
+
+model WebhookInbox {
+  id              String         @id @default(cuid())
+  provider        PaymentProvider
+  providerEventId String         @map("provider_event_id")
+  
+  // Extracted reference for linking
+  reference       String?
+  paymentIntentId String?        @map("payment_intent_id")
+  
+  // Raw payload storage
+  payload         Json
+  headers         Json?
+  
+  // Processing status
+  status          WebhookStatus  @default(RECEIVED)
+  errorMessage    String?        @map("error_message")
+  
+  // Timestamps
+  receivedAt      DateTime       @default(now()) @map("received_at")
+  processedAt     DateTime?      @map("processed_at")
+  
+  paymentIntent   PaymentIntent? @relation(fields: [paymentIntentId], references: [id])
+  
+  // Unique constraint for deduplication
+  @@unique([provider, providerEventId])
+  @@index([reference])
+  @@index([status])
+  @@index([receivedAt])
+  @@map("webhook_inbox")
+}
+
+enum WebhookStatus {
+  RECEIVED
+  VERIFIED
+  FAILED
+  PROCESSED
+  DUPLICATE
+}
+
+// ============================================
+// LEDGER DOMAIN (APPEND-ONLY TRUTH)
+// ============================================
+
+model LedgerEntry {
+  id          String          @id @default(cuid())
+  accountId   String          @map("account_id") // Wallet identifier
+  walletSeq   Int             @map("wallet_seq") // Monotonic per wallet
+  
+  reference   String          // Idempotency key
+  orderId     String?         @map("order_id")
+  
+  entryType   LedgerEntryType @map("entry_type")
+  amount      Decimal         @db.Decimal(19, 4)
+  description String?
+  
+  // Hash chain for integrity
+  prevHash    String?         @map("prev_hash")
+  entryHash   String          @map("entry_hash")
+  
+  createdAt   DateTime        @default(now()) @map("created_at")
+  
+  order       Order?          @relation(fields: [orderId], references: [id])
+  
+  // Unique constraint for idempotency (one reference per account)
+  @@unique([accountId, reference])
+  // Unique sequence per wallet
+  @@unique([accountId, walletSeq])
+  @@index([accountId])
+  @@index([reference])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
+
+enum LedgerEntryType {
+  CREDIT
+  DEBIT
+}
+
+// ============================================
+// WALLET BALANCE CACHE
+// ============================================
+
+model WalletBalanceCache {
+  id            String   @id @default(cuid())
+  accountId     String   @unique @map("account_id")
+  
+  balance       Decimal  @db.Decimal(19, 4)
+  currency      String   @default("NGN")
+  
+  lastEntrySeq  Int      @map("last_entry_seq")
+  lastUpdatedAt DateTime @updatedAt @map("last_updated_at")
+  
+  @@map("wallet_balance_cache")
+}
+
+// ============================================
+// SYSTEM ACCOUNTS (Seeded)
+// ============================================
+// These are created via seed script:
+// - MARKETING_WALLET: Source for discount subsidies
+// - PLATFORM_ESCROW: Receives payments, holds funds
+// - LEGACY_MIGRATION_WALLET: For data migration entries

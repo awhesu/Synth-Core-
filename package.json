@@ -1,0 +1,47 @@
+{
+  "name": "@syntherium/monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Syntherium - API-first LPG infrastructure platform",
+  "scripts": {
+    "dev": "concurrently --names 'orders,intent,webhook,settle,ledger,ops' --prefix-colors 'blue,green,yellow,red,cyan,magenta' 'pnpm dev:orders' 'pnpm dev:intent' 'pnpm dev:webhook' 'pnpm dev:settlement' 'pnpm dev:ledger' 'pnpm dev:ops'",
+    "dev:gateway": "cd apps/api-gateway && pnpm start:dev",
+    "dev:orders": "cd apps/orders-service && pnpm start:dev",
+    "dev:intent": "cd apps/intent-service && pnpm start:dev",
+    "dev:webhook": "cd apps/webhook-service && pnpm start:dev",
+    "dev:settlement": "cd apps/settlement-service && pnpm start:dev",
+    "dev:ledger": "cd apps/ledger-service && pnpm start:dev",
+    "dev:ops": "cd apps/ops-service && pnpm start:dev",
+    "start": "./scripts/dev-start.sh",
+    "api:lint": "redocly lint openapi/v0.1/openapi.yaml",
+    "api:bundle": "redocly bundle openapi/v0.1/openapi.yaml -o openapi/v0.1/dist/openapi.bundle.yaml",
+    "api:gen-types": "pnpm api:lint && pnpm api:bundle && openapi-typescript openapi/v0.1/dist/openapi.bundle.yaml -o libs/contracts/src/api-types.ts",
+    "api:sync": "pnpm api:gen-types",
+    "build": "nx run-many --target=build --all",
+    "test": "nx run-many --target=test --all",
+    "lint": "nx run-many --target=lint --all",
+    "db:generate": "prisma generate --schema=libs/db/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=libs/db/prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema=libs/db/prisma/schema.prisma",
+    "db:seed": "ts-node libs/db/prisma/seed.ts",
+    "db:studio": "prisma studio --schema=libs/db/prisma/schema.prisma",
+    "docker:up": "docker-compose up -d postgres redis",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^1.6.0",
+    "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
+    "nx": "^17.2.0",
+    "openapi-typescript": "^6.7.4",
+    "prisma": "^5.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

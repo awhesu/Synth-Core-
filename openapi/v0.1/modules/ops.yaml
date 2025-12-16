@@ -1,0 +1,530 @@
+# Ops Module - Operations & Administrative Endpoints
+# Owner: @uwana
+
+paths:
+  /ops/webhook-inbox:
+    get:
+      operationId: searchWebhookInbox
+      tags:
+        - Ops
+      summary: Search webhook inbox
+      description: |
+        Search and filter webhook events received from payment providers.
+        Requires ops or admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum:
+              - flutterwave
+              - paystack
+              - stripe
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WebhookStatus'
+        - name: reference
+          in: query
+          schema:
+            type: string
+          description: Payment reference to filter by
+        - name: providerEventId
+          in: query
+          schema:
+            type: string
+          description: Provider's event ID
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Webhook events retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookInboxResponse'
+              example:
+                data:
+                  - id: "wh_001"
+                    provider: "flutterwave"
+                    providerEventId: "flw-evt-123456"
+                    reference: "PAYMENT_order_abc123"
+                    status: "VERIFIED"
+                    payload: {}
+                    receivedAt: "2024-01-15T10:30:00Z"
+                    processedAt: "2024-01-15T10:30:01Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 45
+                  hasMore: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires ops or admin role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ops/ledger-entries:
+    get:
+      operationId: searchLedgerEntriesOps
+      tags:
+        - Ops
+      summary: Search ledger entries (ops view)
+      description: |
+        Search ledger entries with advanced filtering for ops team.
+        Requires ops or admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: string
+        - name: reference
+          in: query
+          schema:
+            type: string
+        - name: orderId
+          in: query
+          schema:
+            type: string
+        - name: entryType
+          in: query
+          schema:
+            type: string
+            enum:
+              - CREDIT
+              - DEBIT
+        - name: minAmount
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+\.\d{4}$'
+        - name: maxAmount
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+\.\d{4}$'
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Ledger entries retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerEntriesOpsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ops/replay-webhook:
+    post:
+      operationId: replayWebhook
+      tags:
+        - Ops
+      summary: Replay a webhook event
+      description: |
+        Re-processes a webhook event for settlement.
+        Useful for handling stuck or failed webhooks.
+        Requires admin role.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplayWebhookRequest'
+            example:
+              webhookId: "wh_001"
+              reason: "Original settlement failed due to transient error"
+      responses:
+        '200':
+          description: Webhook replayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayWebhookResponse'
+              example:
+                webhookId: "wh_001"
+                status: "REPLAYED"
+                message: "Webhook re-processed successfully"
+                settlementTriggered: true
+        '400':
+          description: Cannot replay webhook in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ops/verify-chain:
+    post:
+      operationId: verifyChainOps
+      tags:
+        - Ops
+      summary: Verify ledger chain integrity
+      description: |
+        Verifies the hash chain integrity for one or more accounts.
+        Can verify all accounts or specific ones.
+        Requires ops or admin role.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyChainOpsRequest'
+            examples:
+              single:
+                summary: Verify single account
+                value:
+                  accountIds:
+                    - "PLATFORM_ESCROW"
+              multiple:
+                summary: Verify multiple accounts
+                value:
+                  accountIds:
+                    - "PLATFORM_ESCROW"
+                    - "MARKETING_WALLET"
+                    - "LEGACY_MIGRATION_WALLET"
+              all:
+                summary: Verify all accounts
+                value:
+                  verifyAll: true
+      responses:
+        '200':
+          description: Chain verification results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyChainOpsResponse'
+              example:
+                results:
+                  - accountId: "PLATFORM_ESCROW"
+                    valid: true
+                    entriesVerified: 1523
+                    message: "Chain integrity verified"
+                  - accountId: "MARKETING_WALLET"
+                    valid: true
+                    entriesVerified: 42
+                    message: "Chain integrity verified"
+                summary:
+                  totalAccounts: 2
+                  validAccounts: 2
+                  invalidAccounts: 0
+                  allValid: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    WebhookInboxEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+          enum:
+            - flutterwave
+            - paystack
+            - stripe
+        providerEventId:
+          type: string
+          description: Unique event ID from provider (for deduplication)
+        reference:
+          type: string
+          description: Payment reference extracted from payload
+        status:
+          $ref: '#/components/schemas/WebhookStatus'
+        payload:
+          type: object
+          description: Raw webhook payload
+        errorMessage:
+          type: string
+          nullable: true
+        receivedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+          
+    WebhookStatus:
+      type: string
+      enum:
+        - RECEIVED
+        - VERIFIED
+        - FAILED
+        - PROCESSED
+        - DUPLICATE
+      description: |
+        - RECEIVED: Webhook stored, pending verification
+        - VERIFIED: Signature verified successfully
+        - FAILED: Verification or processing failed
+        - PROCESSED: Settlement triggered successfully
+        - DUPLICATE: Duplicate event (already processed)
+        
+    WebhookInboxResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookInboxEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+          
+    LedgerEntryOps:
+      type: object
+      properties:
+        id:
+          type: string
+        accountId:
+          type: string
+        walletSeq:
+          type: integer
+        reference:
+          type: string
+        orderId:
+          type: string
+          nullable: true
+        entryType:
+          type: string
+          enum:
+            - CREDIT
+            - DEBIT
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        description:
+          type: string
+          nullable: true
+        prevHash:
+          type: string
+          nullable: true
+        entryHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          
+    LedgerEntriesOpsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntryOps'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        aggregates:
+          type: object
+          properties:
+            totalCredits:
+              type: string
+              pattern: '^\d+\.\d{4}$'
+            totalDebits:
+              type: string
+              pattern: '^\d+\.\d{4}$'
+            netAmount:
+              type: string
+              pattern: '^\-?\d+\.\d{4}$'
+              
+    ReplayWebhookRequest:
+      type: object
+      required:
+        - webhookId
+        - reason
+      properties:
+        webhookId:
+          type: string
+        reason:
+          type: string
+          description: Audit trail for why webhook is being replayed
+          
+    ReplayWebhookResponse:
+      type: object
+      properties:
+        webhookId:
+          type: string
+        status:
+          type: string
+          enum:
+            - REPLAYED
+            - ALREADY_PROCESSED
+            - FAILED
+        message:
+          type: string
+        settlementTriggered:
+          type: boolean
+          
+    VerifyChainOpsRequest:
+      type: object
+      properties:
+        accountIds:
+          type: array
+          items:
+            type: string
+          description: Specific accounts to verify
+        verifyAll:
+          type: boolean
+          default: false
+          description: If true, verify all accounts
+          
+    VerifyChainOpsResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerifyChainResult'
+        summary:
+          type: object
+          properties:
+            totalAccounts:
+              type: integer
+            validAccounts:
+              type: integer
+            invalidAccounts:
+              type: integer
+            allValid:
+              type: boolean
+              
+    VerifyChainResult:
+      type: object
+      properties:
+        accountId:
+          type: string
+        valid:
+          type: boolean
+        entriesVerified:
+          type: integer
+        brokenAtSeq:
+          type: integer
+          nullable: true
+        expectedHash:
+          type: string
+          nullable: true
+        actualHash:
+          type: string
+          nullable: true
+        message:
+          type: string
+          
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+          
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

@@ -1,0 +1,61 @@
+name: API Contract Validation
+
+on:
+  push:
+    branches: [main, 'syntherium-*']
+    paths:
+      - 'openapi/**'
+      - 'libs/contracts/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'openapi/**'
+      - 'libs/contracts/**'
+
+jobs:
+  validate-contracts:
+    name: Validate OpenAPI Contracts
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Lint OpenAPI specs
+        run: pnpm api:lint
+        
+      - name: Bundle OpenAPI specs
+        run: pnpm api:bundle
+        
+      - name: Generate TypeScript types
+        run: pnpm api:gen-types
+        
+      - name: Check for uncommitted changes
+        run: |
+          if [[ -n $(git status --porcelain libs/contracts/src/api-types.ts) ]]; then
+            echo "::error::Generated API types are out of sync!"
+            echo "Please run 'pnpm api:sync' and commit the changes."
+            git diff libs/contracts/src/api-types.ts
+            exit 1
+          fi
+          echo "✅ API types are in sync"
+          
+      - name: Upload bundled OpenAPI spec
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-bundle
+          path: openapi/v0.1/dist/openapi.bundle.yaml
+          retention-days: 30

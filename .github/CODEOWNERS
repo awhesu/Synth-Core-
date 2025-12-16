@@ -1,0 +1,35 @@
+# Syntherium Platform CODEOWNERS
+# Each module has designated owners who must approve changes
+
+# OpenAPI Module Ownership
+/openapi/v0.1/modules/intents.yaml @stella
+/openapi/v0.1/modules/ledger.yaml @samuel
+/openapi/v0.1/modules/orders.yaml @abigail
+/openapi/v0.1/modules/ops.yaml @uwana
+
+# Root OpenAPI requires multi-approval (breaking change coordination)
+/openapi/v0.1/openapi.yaml @samuel @uwana @abigail
+
+# Generated contracts - auto-generated, no direct edits
+/libs/contracts/src/api-types.ts @samuel @uwana
+
+# Database schema changes require senior review
+/libs/db/prisma/ @samuel @platform-leads
+
+# Core financial logic requires extra scrutiny
+/libs/ledger-core/ @samuel @platform-leads
+/apps/settlement-service/ @samuel @platform-leads
+
+# Service-specific ownership
+/apps/intent-service/ @stella
+/apps/webhook-service/ @stella @samuel
+/apps/orders-service/ @abigail
+/apps/ops-service/ @uwana
+/apps/ledger-service/ @samuel
+/apps/api-gateway/ @platform-leads
+
+# Documentation
+/docs/ @platform-leads
+
+# CI/CD and infrastructure
+/.github/ @platform-leads

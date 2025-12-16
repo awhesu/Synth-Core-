@@ -1,0 +1,573 @@
+# Orders Module - Order Lifecycle Management
+# Owner: @abigail
+
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      tags:
+        - Orders
+      summary: Create a new order
+      description: Creates a new LPG order in PENDING status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              customerId: "cust_xyz789"
+              vendorId: "vendor_abc123"
+              items:
+                - productId: "prod_lpg_12kg"
+                  productName: "12kg LPG Cylinder Refill"
+                  quantity: 2
+                  unitPrice: "5000.0000"
+              deliveryAddress:
+                street: "123 Main Street"
+                city: "Lagos"
+                state: "Lagos"
+                country: "Nigeria"
+                coordinates:
+                  lat: 6.5244
+                  lng: 3.3792
+              deliveryType: "DELIVERY"
+              notes: "Please call before delivery"
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+    get:
+      operationId: listOrders
+      tags:
+        - Orders
+      summary: List orders
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+        - name: vendorId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Orders retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdersResponse'
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags:
+        - Orders
+      summary: Get order by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/accept:
+    post:
+      operationId: acceptOrder
+      tags:
+        - Orders
+      summary: Vendor accepts order
+      description: Transitions order from PENDING to ACCEPTED
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptOrderRequest'
+            example:
+              estimatedDeliveryTime: "2024-01-15T14:00:00Z"
+              driverId: "driver_abc"
+      responses:
+        '200':
+          description: Order accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/dispatch:
+    post:
+      operationId: dispatchOrder
+      tags:
+        - Orders
+      summary: Mark order as dispatched
+      description: Transitions order from ACCEPTED to DISPATCHED
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchOrderRequest'
+            example:
+              driverId: "driver_abc"
+              vehicleInfo: "Toyota Hilux - ABC123XY"
+      responses:
+        '200':
+          description: Order dispatched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/deliver:
+    post:
+      operationId: deliverOrder
+      tags:
+        - Orders
+      summary: Mark order as delivered
+      description: Transitions order from DISPATCHED to DELIVERED
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverOrderRequest'
+            example:
+              deliveredAt: "2024-01-15T13:45:00Z"
+              receiverName: "John Doe"
+              proofOfDelivery: "photo_url_or_signature_data"
+      responses:
+        '200':
+          description: Order delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/cancel:
+    post:
+      operationId: cancelOrder
+      tags:
+        - Orders
+      summary: Cancel order
+      description: Cancels order. Only allowed in certain states.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+            example:
+              reason: "CUSTOMER_REQUEST"
+              description: "Customer no longer needs the order"
+      responses:
+        '200':
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Cannot cancel order in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /orders/{id}/financial-status:
+    get:
+      operationId: getOrderFinancialStatus
+      tags:
+        - Orders
+      summary: Get order financial status
+      description: |
+        Returns aggregated financial status combining order details
+        with payment intent status for UI-friendly display.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Financial status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderFinancialStatus'
+              example:
+                orderId: "order_abc123"
+                orderStatus: "DELIVERED"
+                totalAmount: "10000.0000"
+                paidAmount: "8500.0000"
+                discountAmount: "1500.0000"
+                paymentStatus: "SETTLED"
+                paymentIntentId: "pi_abc123"
+                isPaid: true
+                message: "Payment settled successfully"
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required:
+        - customerId
+        - vendorId
+        - items
+        - deliveryType
+      properties:
+        customerId:
+          type: string
+        vendorId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+          minItems: 1
+        deliveryAddress:
+          $ref: '#/components/schemas/DeliveryAddress'
+        deliveryType:
+          type: string
+          enum:
+            - DELIVERY
+            - PICKUP
+        notes:
+          type: string
+          
+    OrderItem:
+      type: object
+      required:
+        - productId
+        - productName
+        - quantity
+        - unitPrice
+      properties:
+        productId:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          
+    DeliveryAddress:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+          default: Nigeria
+        coordinates:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+              
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        customerId:
+          type: string
+        vendorId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        deliveryFee:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        totalAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        deliveryAddress:
+          $ref: '#/components/schemas/DeliveryAddress'
+        deliveryType:
+          type: string
+          enum:
+            - DELIVERY
+            - PICKUP
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        driverId:
+          type: string
+          nullable: true
+        estimatedDeliveryTime:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancellationReason:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          
+    OrderStatus:
+      type: string
+      enum:
+        - PENDING
+        - ACCEPTED
+        - DISPATCHED
+        - DELIVERED
+        - CANCELLED
+      description: |
+        Order lifecycle states:
+        - PENDING: Order created, awaiting vendor acceptance
+        - ACCEPTED: Vendor accepted, preparing for dispatch
+        - DISPATCHED: Order dispatched for delivery
+        - DELIVERED: Order delivered successfully
+        - CANCELLED: Order cancelled
+        
+    AcceptOrderRequest:
+      type: object
+      properties:
+        estimatedDeliveryTime:
+          type: string
+          format: date-time
+        driverId:
+          type: string
+          
+    DispatchOrderRequest:
+      type: object
+      properties:
+        driverId:
+          type: string
+        vehicleInfo:
+          type: string
+          
+    DeliverOrderRequest:
+      type: object
+      properties:
+        deliveredAt:
+          type: string
+          format: date-time
+        receiverName:
+          type: string
+        proofOfDelivery:
+          type: string
+          
+    CancelOrderRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum:
+            - CUSTOMER_REQUEST
+            - VENDOR_UNAVAILABLE
+            - OUT_OF_STOCK
+            - DELIVERY_FAILED
+            - PAYMENT_FAILED
+            - OTHER
+        description:
+          type: string
+          
+    OrdersResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+          
+    OrderFinancialStatus:
+      type: object
+      properties:
+        orderId:
+          type: string
+        orderStatus:
+          $ref: '#/components/schemas/OrderStatus'
+        totalAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        paidAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          nullable: true
+        discountAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          nullable: true
+        paymentStatus:
+          type: string
+          enum:
+            - NO_PAYMENT
+            - PENDING
+            - INITIATED
+            - CONFIRMING
+            - SETTLED
+            - FAILED
+            - EXPIRED
+            - REFUNDED
+        paymentIntentId:
+          type: string
+          nullable: true
+        isPaid:
+          type: boolean
+          description: True only when paymentStatus is SETTLED
+        message:
+          type: string
+          description: Human-readable status message
+          
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+          
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

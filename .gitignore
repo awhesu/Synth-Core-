@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Nx
+.nx
+.nx/cache
+.nx/workspace-data
+
+# Test
+coverage
+
+# Prisma
+libs/db/prisma/*.db
+libs/db/prisma/*.db-journal
+
+# Generated
+libs/contracts/src/api-types.ts
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Temp
+tmp

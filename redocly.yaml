@@ -1,0 +1,30 @@
+# Redocly configuration for OpenAPI linting and bundling
+
+extends:
+  - recommended
+
+rules:
+  # Ensure all operations have operationId
+  operation-operationId: error
+  
+  # Require descriptions
+  operation-description: warn
+  tag-description: warn
+  
+  # Security requirements
+  security-defined: error
+  
+  # Schema rules
+  no-invalid-media-type-examples: warn
+  spec-components-invalid-map-name: error
+  
+  # Path rules
+  path-parameters-defined: error
+  no-ambiguous-paths: error
+  
+  # Response rules
+  operation-4xx-response: warn
+
+theme:
+  openapi:
+    schemaExpansionLevel: 2

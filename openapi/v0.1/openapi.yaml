@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: Syntherium Platform API
+  description: |
+    API-first infrastructure platform for LPG operations including orders, 
+    payments, settlements, ledger, and operational visibility.
+    
+    Syntherium is the truth layer that serves as the backend for clients 
+    like EZGas. It provides a unified API for managing the complete LPG 
+    supply chain.
+  version: 0.1.0
+  contact:
+    name: SyncTech Innovations
+    email: platform@synctech.dev
+  license:
+    name: Proprietary
+    
+servers:
+  - url: http://localhost:3000/v1
+    description: Local development
+  - url: https://api.syntherium.io/v1
+    description: Production
+
+tags:
+  - name: Health
+    description: Service health endpoints
+  - name: Intents
+    description: Payment and refund intent management
+  - name: Ledger
+    description: Financial ledger operations
+  - name: Orders
+    description: Order lifecycle management
+  - name: Ops
+    description: Operations and administrative endpoints
+
+paths:
+  # Intent endpoints
+  /intents/payments:
+    $ref: './modules/intents.yaml#/paths/~1intents~1payments'
+  /intents/payments/{id}:
+    $ref: './modules/intents.yaml#/paths/~1intents~1payments~1{id}'
+  /intents/refunds:
+    $ref: './modules/intents.yaml#/paths/~1intents~1refunds'
+  /intents/refunds/{id}:
+    $ref: './modules/intents.yaml#/paths/~1intents~1refunds~1{id}'
+    
+  # Ledger endpoints
+  /ledger/entries:
+    $ref: './modules/ledger.yaml#/paths/~1ledger~1entries'
+  /wallets/{accountId}/balance:
+    $ref: './modules/ledger.yaml#/paths/~1wallets~1{accountId}~1balance'
+  /ledger/verify-chain:
+    $ref: './modules/ledger.yaml#/paths/~1ledger~1verify-chain'
+    
+  # Order endpoints
+  /orders:
+    $ref: './modules/orders.yaml#/paths/~1orders'
+  /orders/{id}:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}'
+  /orders/{id}/accept:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}~1accept'
+  /orders/{id}/dispatch:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}~1dispatch'
+  /orders/{id}/deliver:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}~1deliver'
+  /orders/{id}/cancel:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}~1cancel'
+  /orders/{id}/financial-status:
+    $ref: './modules/orders.yaml#/paths/~1orders~1{id}~1financial-status'
+    
+  # Ops endpoints
+  /ops/webhook-inbox:
+    $ref: './modules/ops.yaml#/paths/~1ops~1webhook-inbox'
+  /ops/ledger-entries:
+    $ref: './modules/ops.yaml#/paths/~1ops~1ledger-entries'
+  /ops/replay-webhook:
+    $ref: './modules/ops.yaml#/paths/~1ops~1replay-webhook'
+  /ops/verify-chain:
+    $ref: './modules/ops.yaml#/paths/~1ops~1verify-chain'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid request parameters
+        details:
+          type: object
+          additionalProperties: true
+          
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+
+security:
+  - BearerAuth: []
+  - ApiKey: []

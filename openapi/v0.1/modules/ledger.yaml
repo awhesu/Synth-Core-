@@ -1,0 +1,300 @@
+# Ledger Module - Financial Truth Layer
+# Owner: @samuel
+
+paths:
+  /ledger/entries:
+    get:
+      operationId: getLedgerEntries
+      tags:
+        - Ledger
+      summary: Query ledger entries
+      description: |
+        Retrieves ledger entries with filtering and pagination.
+        The ledger is append-only and entries are immutable.
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: string
+          description: Filter by wallet/account ID
+        - name: reference
+          in: query
+          schema:
+            type: string
+          description: Filter by transaction reference
+        - name: orderId
+          in: query
+          schema:
+            type: string
+          description: Filter by order ID
+        - name: entryType
+          in: query
+          schema:
+            $ref: '#/components/schemas/LedgerEntryType'
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Ledger entries retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerEntriesResponse'
+              example:
+                data:
+                  - id: "le_001"
+                    accountId: "PLATFORM_ESCROW"
+                    walletSeq: 42
+                    reference: "PAYMENT_order_abc123"
+                    orderId: "order_abc123"
+                    entryType: "CREDIT"
+                    amount: "8500.0000"
+                    description: "Payment received"
+                    prevHash: "abc123..."
+                    entryHash: "def456..."
+                    createdAt: "2024-01-15T10:30:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 156
+                  hasMore: true
+
+  /wallets/{accountId}/balance:
+    get:
+      operationId: getWalletBalance
+      tags:
+        - Ledger
+      summary: Get wallet balance
+      description: |
+        Retrieves the current cached balance for a wallet.
+        Balance is derived from ledger entries and cached for performance.
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "PLATFORM_ESCROW"
+      responses:
+        '200':
+          description: Wallet balance retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletBalance'
+              example:
+                accountId: "PLATFORM_ESCROW"
+                balance: "1250000.0000"
+                currency: "NGN"
+                lastEntrySeq: 42
+                lastUpdatedAt: "2024-01-15T10:30:00Z"
+        '404':
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ledger/verify-chain:
+    post:
+      operationId: verifyLedgerChain
+      tags:
+        - Ledger
+      summary: Verify ledger chain integrity
+      description: |
+        Recomputes hash chain for an account and verifies integrity.
+        Returns OK if chain is valid, or the sequence number where 
+        the chain is broken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyChainRequest'
+            example:
+              accountId: "PLATFORM_ESCROW"
+      responses:
+        '200':
+          description: Chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyChainResponse'
+              examples:
+                valid:
+                  summary: Valid chain
+                  value:
+                    accountId: "PLATFORM_ESCROW"
+                    valid: true
+                    entriesVerified: 42
+                    message: "Chain integrity verified"
+                broken:
+                  summary: Broken chain
+                  value:
+                    accountId: "PLATFORM_ESCROW"
+                    valid: false
+                    brokenAtSeq: 15
+                    expectedHash: "abc123..."
+                    actualHash: "xyz789..."
+                    message: "Chain broken at sequence 15"
+
+components:
+  schemas:
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique ledger entry ID
+        accountId:
+          type: string
+          description: Wallet/account identifier
+        walletSeq:
+          type: integer
+          description: Monotonically increasing sequence per wallet
+        reference:
+          type: string
+          description: Idempotency reference (unique per account+reference)
+        orderId:
+          type: string
+          nullable: true
+          description: Associated order ID if applicable
+        entryType:
+          $ref: '#/components/schemas/LedgerEntryType'
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Entry amount with precision 4
+        description:
+          type: string
+          nullable: true
+        prevHash:
+          type: string
+          nullable: true
+          description: Hash of previous entry (null for genesis)
+        entryHash:
+          type: string
+          description: SHA256 hash of this entry
+        createdAt:
+          type: string
+          format: date-time
+          
+    LedgerEntryType:
+      type: string
+      enum:
+        - CREDIT
+        - DEBIT
+      description: |
+        - CREDIT: Adds to wallet balance
+        - DEBIT: Subtracts from wallet balance
+        
+    LedgerEntriesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+          
+    WalletBalance:
+      type: object
+      properties:
+        accountId:
+          type: string
+        balance:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        currency:
+          type: string
+          default: NGN
+        lastEntrySeq:
+          type: integer
+          description: Sequence of last ledger entry
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          
+    VerifyChainRequest:
+      type: object
+      required:
+        - accountId
+      properties:
+        accountId:
+          type: string
+        fromSeq:
+          type: integer
+          description: Start verification from this sequence (default 1)
+        toSeq:
+          type: integer
+          description: End verification at this sequence (default latest)
+          
+    VerifyChainResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+        valid:
+          type: boolean
+        entriesVerified:
+          type: integer
+        brokenAtSeq:
+          type: integer
+          nullable: true
+          description: Set if chain is broken
+        expectedHash:
+          type: string
+          nullable: true
+        actualHash:
+          type: string
+          nullable: true
+        message:
+          type: string
+          
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+          
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

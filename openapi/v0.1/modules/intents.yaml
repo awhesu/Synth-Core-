@@ -1,0 +1,331 @@
+# Intents Module - Payment and Refund Intent Management
+# Owner: @stella
+
+paths:
+  /intents/payments:
+    post:
+      operationId: createPaymentIntent
+      tags:
+        - Intents
+      summary: Create a payment intent
+      description: |
+        Creates a new payment intent for an order. The payment intent tracks
+        the payment lifecycle from creation through settlement.
+        
+        **Invariants:**
+        - `originalAmount >= amount`
+        - `discountAmount = originalAmount - amount`
+        - If `discountAmount > 0`, `discountCode` is required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentIntentRequest'
+            example:
+              orderId: "order_abc123"
+              amount: "8500.0000"
+              originalAmount: "10000.0000"
+              discountCode: "PROMO2024"
+              provider: "flutterwave"
+              currency: "NGN"
+              metadata:
+                customerId: "cust_xyz"
+      responses:
+        '201':
+          description: Payment intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentIntent'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Payment intent already exists for order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /intents/payments/{id}:
+    get:
+      operationId: getPaymentIntent
+      tags:
+        - Intents
+      summary: Get payment intent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pi_abc123"
+      responses:
+        '200':
+          description: Payment intent found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentIntent'
+        '404':
+          description: Payment intent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /intents/refunds:
+    post:
+      operationId: createRefundIntent
+      tags:
+        - Intents
+      summary: Create a refund intent
+      description: |
+        Creates a new refund intent for a settled payment. Refunds create
+        new ledger entries and never mutate existing ones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundIntentRequest'
+            example:
+              paymentIntentId: "pi_abc123"
+              amount: "5000.0000"
+              reason: "CUSTOMER_REQUEST"
+              description: "Partial refund for order cancellation"
+      responses:
+        '201':
+          description: Refund intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundIntent'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Original payment intent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /intents/refunds/{id}:
+    get:
+      operationId: getRefundIntent
+      tags:
+        - Intents
+      summary: Get refund intent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "ri_abc123"
+      responses:
+        '200':
+          description: Refund intent found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundIntent'
+        '404':
+          description: Refund intent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    CreatePaymentIntentRequest:
+      type: object
+      required:
+        - orderId
+        - amount
+        - originalAmount
+        - provider
+        - currency
+      properties:
+        orderId:
+          type: string
+          description: Unique order identifier
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Amount to charge customer (precision 4)
+        originalAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Full value of goods before discount (precision 4)
+        discountCode:
+          type: string
+          description: Required if discountAmount > 0
+        provider:
+          type: string
+          enum:
+            - flutterwave
+            - paystack
+            - stripe
+          description: Payment provider to use
+        currency:
+          type: string
+          enum:
+            - NGN
+            - USD
+          default: NGN
+        metadata:
+          type: object
+          additionalProperties: true
+          
+    PaymentIntent:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "pi_abc123"
+        reference:
+          type: string
+          description: Deterministic reference PAYMENT_{orderId}
+          example: "PAYMENT_order_abc123"
+        orderId:
+          type: string
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Customer charge amount
+        originalAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Full value before discount
+        discountAmount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          description: Subsidy amount (originalAmount - amount)
+        discountCode:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          enum:
+            - flutterwave
+            - paystack
+            - stripe
+        providerRef:
+          type: string
+          nullable: true
+          description: Provider transaction reference
+        currency:
+          type: string
+        status:
+          $ref: '#/components/schemas/PaymentIntentStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          
+    PaymentIntentStatus:
+      type: string
+      enum:
+        - PENDING
+        - INITIATED
+        - CONFIRMING
+        - SETTLED
+        - FAILED
+        - EXPIRED
+        - REFUNDED
+      description: |
+        - PENDING: Intent created, awaiting payment initiation
+        - INITIATED: Payment initiated with provider
+        - CONFIRMING: Webhook received, awaiting settlement
+        - SETTLED: Payment confirmed and ledger entries created
+        - FAILED: Payment failed
+        - EXPIRED: Payment window expired
+        - REFUNDED: Fully refunded
+        
+    CreateRefundIntentRequest:
+      type: object
+      required:
+        - paymentIntentId
+        - amount
+        - reason
+      properties:
+        paymentIntentId:
+          type: string
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        reason:
+          type: string
+          enum:
+            - CUSTOMER_REQUEST
+            - VENDOR_CANCELLATION
+            - DELIVERY_FAILED
+            - DUPLICATE_PAYMENT
+            - FRAUD
+            - OTHER
+        description:
+          type: string
+          
+    RefundIntent:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+          description: Deterministic reference REFUND_{paymentIntentId}_{seq}
+        paymentIntentId:
+          type: string
+        amount:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+        reason:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/RefundIntentStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          
+    RefundIntentStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - SETTLED
+        - FAILED
+        
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
